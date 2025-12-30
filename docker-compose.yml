@@ -1,0 +1,66 @@
+version: '3.9'
+services:
+    server:
+        container_name: igaming-nginx
+        image: nginx:1.15-alpine
+        volumes:
+            - ./:/var/www
+            - ./docker/nginx:/etc/nginx/conf.d
+        ports:
+            - ${SERVER_PORT}:80
+        depends_on:
+            - fpm
+        networks:
+            - igaming
+    fpm:
+      container_name: igaming-fpm
+      build:
+        context: .
+        dockerfile: docker/fpm/Dockerfile
+      depends_on:
+        - db
+      volumes:
+        - ./:/var/www
+      networks:
+        - igaming
+    db:
+        container_name: igaming-mysql
+        image: mysql:8.0
+        command: --default-authentication-plugin=mysql_native_password
+        restart: unless-stopped
+        environment:
+            MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+            MYSQL_USER: ${DB_USERNAME}
+            MYSQL_PASSWORD: ${DB_PASSWORD}
+            MYSQL_DATABASE: ${DB_DATABASE}
+        ports:
+            - ${DB_PORT}:3306
+        volumes:
+            - ./docker/data/mysql:/var/lib/mysql/
+        healthcheck:
+            test: [ 'CMD', 'mysqladmin', 'ping', '-proot' ]
+            interval: 1m
+            timeout: 5s
+            retries: 5
+            start_period: 3m
+        networks:
+            - igaming
+    cache:
+        container_name: igaming-redis
+        image: redis:8.0.0
+        restart: unless-stopped
+        ports:
+            - ${REDIS_PORT}:6379
+        command: redis-server --save 20 1 --loglevel warning
+        volumes:
+            - ./docker/data/redis:/data
+        healthcheck:
+            test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+            interval: 30s
+            timeout: 10s
+            retries: 5
+        networks:
+            - igaming
+networks:
+  igaming:
+        driver: bridge
